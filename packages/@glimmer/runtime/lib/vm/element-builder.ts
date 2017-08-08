@@ -15,7 +15,7 @@ import DynamicNodeContent from './content/node';
 import DynamicHTMLContent, { DynamicTrustedHTMLContent } from './content/html';
 
 import { DynamicAttribute } from './attributes/dynamic';
-
+import { DynamicAttributeFactory, defaultDynamicAttributes } from './attributes/dynamic';
 import { Opaque, Simple } from "@glimmer/interfaces";
 
 export interface FirstNode {
@@ -99,10 +99,9 @@ export interface TreeOperations {
 export interface ElementBuilder extends Cursor, DOMStack, TreeOperations {
   nextSibling: Option<Simple.Node>;
   dom: DOMTreeConstruction;
-  updateOperations: DOMChanges;
+  updateOperations: Option<DOMChanges>;
   constructing: Option<Simple.Element>;
   element: Simple.Element;
-  env: Environment;
 
   // TODO: ?
   expectConstructing(method: string): Simple.Element;
@@ -116,40 +115,59 @@ export interface ElementBuilder extends Cursor, DOMStack, TreeOperations {
 
   didAddDestroyable(d: Destroyable): void;
   didAppendBounds(bounds: Bounds): void;
+  protocolForURL(url: string): string;
+  attributeFor(element: Simple.Element, attr: string, _isTrusting: boolean, namespace: Option<string>): DynamicAttributeFactory;
 }
 
 export class NewElementBuilder implements ElementBuilder {
   public dom: DOMTreeConstruction;
-  public updateOperations: DOMChanges;
+  public updateOperations: Option<DOMChanges>;
   public constructing: Option<Simple.Element> = null;
   public operations: Option<ElementOperations> = null;
-  public env: Environment;
+  private uselessAnchor: HTMLAnchorElement;
 
   private cursorStack = new Stack<Cursor>();
   private blockStack = new Stack<Tracker>();
 
-  static forInitialRender(env: Environment, cursor: Cursor) {
-    let builder = new this(env, cursor.element, cursor.nextSibling);
-    builder.pushSimpleBlock();
+  static forInitialRender(cursor?: Cursor) {
+    assert(typeof document !== 'undefined', '[ATTENTION]: You are using an ElementBuilder that is meant to be used in browser. No Document was found.');
+    let builder = new this(document, cursor);
     return builder;
   }
 
-  static resume(env: Environment, tracker: Tracker, nextSibling: Option<Simple.Node>) {
+  static resume(tracker: Tracker, nextSibling: Option<Simple.Node>) {
     let parentNode = tracker.parentElement();
 
-    let stack = new this(env, parentNode, nextSibling);
+    let stack = new this(document, { element: parentNode, nextSibling });
     stack.pushSimpleBlock();
     stack.pushBlockTracker(tracker);
 
     return stack;
   }
 
-  constructor(env: Environment, parentNode: Simple.Element, nextSibling: Option<Simple.Node>) {
-    this.cursorStack.push(new Cursor(parentNode, nextSibling));
+  constructor(doc: Simple.Document, cursor?: Cursor) {
+    if (cursor) {
+      let { element: parentNode, nextSibling } = cursor;
+      this.initializeCursor(parentNode, nextSibling);
+    }
 
-    this.env = env;
-    this.dom = env.getAppendOperations();
-    this.updateOperations = env.getDOM();
+    this.dom = new DOMTreeConstruction(doc);
+    this.uselessAnchor = this.dom.createElement('a') as HTMLAnchorElement;
+    this.updateOperations = new DOMChanges(doc as Document);
+  }
+
+  protocolForURL(url: string): string {
+    this.uselessAnchor.href = url;
+    return this.uselessAnchor.protocol;
+  }
+
+  attributeFor(element: Simple.Element, attr: string, _isTrusting: boolean, _namespace: Option<string> = null): DynamicAttributeFactory {
+    return defaultDynamicAttributes(element, attr);
+  }
+
+  initializeCursor(element: Simple.Element, nextSibling: Option<Simple.Node>) {
+    this.pushElement(element, nextSibling);
+    this.pushSimpleBlock();
   }
 
   get element(): Simple.Element {
@@ -256,7 +274,7 @@ export class NewElementBuilder implements ElementBuilder {
     this.popElement();
   }
 
-  protected pushElement(element: Simple.Element, nextSibling: Option<Simple.Node>) {
+  pushElement(element: Simple.Element, nextSibling: Option<Simple.Node>) {
     this.cursorStack.push(new Cursor(element, nextSibling));
   }
 
@@ -407,10 +425,10 @@ export class NewElementBuilder implements ElementBuilder {
 
   setDynamicAttribute(name: string, value: Opaque, trusting: boolean, namespace: Option<string>): DynamicAttribute {
     let element = this.constructing!;
-    let DynamicAttribute = this.env.attributeFor(element, name, trusting, namespace);
-    let attribute = new DynamicAttribute({ element, name, namespace: namespace || null });
+    let DynamicAttribute = this.attributeFor(element, name, trusting, namespace);
+    let attribute = new DynamicAttribute(this, { element, name, namespace: namespace || null });
 
-    attribute.set(this, value, this.env);
+    attribute.set(value);
 
     return attribute;
   }

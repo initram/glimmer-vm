@@ -1,7 +1,7 @@
 import { Scope, DynamicScope, Environment, Handle, Program } from '../environment';
 import { DestroyableBounds, clear, move as moveBounds } from '../bounds';
 import { NewElementBuilder, Tracker, UpdatableTracker } from './element-builder';
-import { Option, Opaque, Stack, LinkedList, Dict, dict, expect } from '@glimmer/util';
+import { Option, Opaque, Stack, LinkedList, Dict, dict, expect, assert } from "@glimmer/util";
 import {
   PathReference,
   IterationArtifacts,
@@ -34,9 +34,10 @@ export default class UpdatingVM {
   private frameStack: Stack<UpdatingVMFrame> = new Stack<UpdatingVMFrame>();
 
   constructor(env: Environment, program: Program, { alwaysRevalidate = false }) {
+    assert(typeof document !== 'undefined', '[ATTENTION]: You are trying to update the DOM in the server. During SSR you cannot have updates.');
     this.env = env;
     this.constants = program.constants;
-    this.dom = env.getDOM();
+    this.dom = new DOMChanges(document);
     this.alwaysRevalidate = alwaysRevalidate;
   }
 
@@ -172,7 +173,6 @@ export class TryOpcode extends BlockOpcode implements ExceptionHandler {
     children.clear();
 
     let elementStack = NewElementBuilder.resume(
-      state.env,
       bounds,
       bounds.reset(state.env)
     );
@@ -330,7 +330,6 @@ export class ListBlockOpcode extends BlockOpcode {
     let { bounds, state } = this;
 
     let elementStack = NewElementBuilder.forInitialRender(
-      state.env,
       { element: bounds.parentElement(), nextSibling }
     );
 

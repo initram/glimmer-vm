@@ -1,6 +1,5 @@
 import DynamicContentBase, { DynamicContent } from './dynamic';
 import { SingleNodeBounds } from '../../bounds';
-import Environment from '../../environment';
 import { isNode, isSafeString, isEmpty, isString } from '../../dom/normalize';
 import { Opaque } from "@glimmer/interfaces";
 
@@ -9,11 +8,11 @@ export default class DynamicTextContent extends DynamicContentBase {
     super(trusted);
   }
 
-  update(env: Environment, value: Opaque): DynamicContent {
+  update(value: Opaque): DynamicContent {
     let { lastValue } = this;
 
     if (value === lastValue) return this;
-    if (isNode(value) || isSafeString(value)) return this.retry(env, value);
+    if (isNode(value) || isSafeString(value)) return this.retry(value);
 
     let normalized: string;
 

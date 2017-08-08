@@ -1,6 +1,5 @@
 import { NewElementBuilder, ElementBuilder, ElementOperations } from "./element-builder";
 
-import { Environment } from '../environment';
 import Bounds, { bounds } from '../bounds';
 import { Simple, Option, Opaque } from "@glimmer/interfaces";
 import { DynamicContentWrapper } from './content/dynamic';
@@ -15,10 +14,10 @@ export class RehydrateBuilder extends NewElementBuilder implements ElementBuilde
   private unmatchedAttributes: Option<Simple.Attribute[]> = null;
   private blockDepth = 0;
 
-  constructor(env: Environment, parentNode: Simple.Element, nextSibling: Option<Simple.Node>) {
-    super(env, parentNode, nextSibling);
+  initializeCursor(element: Simple.Element, nextSibling: Option<Simple.Node>) {
+    super.initializeCursor(element, nextSibling);
     if (nextSibling) throw new Error("Rehydration with nextSibling not supported");
-    this._candidate = parentNode.firstChild;
+    this._candidate = element.firstChild;
   }
 
   get candidate(): Option<Simple.Node> {
@@ -245,7 +244,7 @@ export class RehydrateBuilder extends NewElementBuilder implements ElementBuilde
 
   appendCautiousDynamicContent(value: Opaque): DynamicContentWrapper {
     let content = super.appendCautiousDynamicContent(value);
-    content.update(this.env, value);
+    content.update(value);
     return content;
   }
 

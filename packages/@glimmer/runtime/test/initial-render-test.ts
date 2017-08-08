@@ -1,5 +1,5 @@
 import { Opaque, Dict } from "@glimmer/interfaces";
-import { SVG_NAMESPACE, RenderResult } from "@glimmer/runtime";
+import { SVG_NAMESPACE, RenderResult, RehydrateBuilder } from "@glimmer/runtime";
 import {
   RenderTests,
   module,
@@ -17,7 +17,7 @@ import {
   content
 } from "@glimmer/test-helpers";
 import * as SimpleDOM from "simple-dom";
-import { NodeDOMTreeConstruction } from "@glimmer/node";
+import { SerializeBuilder } from "@glimmer/node";
 import { expect } from "@glimmer/util";
 import { UpdatableReference } from "@glimmer/object-reference";
 
@@ -1084,13 +1084,13 @@ class Rehydration extends RenderingTest {
   public serialized: string;
   public doc: any;
 
-  setupServer(template: string = this.template) {
-    let doc = this.doc = new SimpleDOM.Document();
-    let env = new TestEnvironment({
-      document: doc,
-      appendOperations: new NodeDOMTreeConstruction(doc)
-    });
+  constructor(env: TestEnvironment) {
+    super(env);
+    this.doc = document;
+  }
 
+  setupServer(template: string = this.template) {
+    let env = new TestEnvironment();
     this.setup({ template, env });
   }
 
@@ -1124,15 +1124,20 @@ class Rehydration extends RenderingTest {
     }
     this.setupServer();
     this.populateHelpers();
-    this.element = this.doc.createElement("main") as HTMLDivElement;
+    let elementBuilder = SerializeBuilder.forInitialRender() as SerializeBuilder;
+    this.doc = elementBuilder.document;
+    this.element = elementBuilder.dom.createElement("main") as HTMLDivElement;
+    elementBuilder.initializeCursor(this.element, null);
     let template = expect(this.template, "Must set up a template before calling renderServerSide");
+
+    this.env['elementBuilder'] = SerializeBuilder;
+
     // Emulate server-side render
     renderTemplate(template, {
+      elementBuilder,
       env: this.env,
       self: new UpdatableReference(this.context),
-      cursor: { element: this.element, nextSibling: null },
-      dynamicScope: new TestDynamicScope(),
-      mode: "serialize"
+      dynamicScope: new TestDynamicScope()
     });
 
     this.doc.appendChild(this.element);
@@ -1156,12 +1161,15 @@ class Rehydration extends RenderingTest {
     this.element = this.doc.createElement("div") as HTMLDivElement;
     let template = expect(this.template, "Must set up a template before calling renderClientSide");
     // Client-side rehydration
+    let elementBuilder = RehydrateBuilder.forInitialRender({
+      element: this.element,
+      nextSibling: null
+    });
     this.renderResult = renderTemplate(template, {
       env: this.env,
+      elementBuilder,
       self: new UpdatableReference(this.context),
-      cursor: { element: this.element, nextSibling: null },
-      dynamicScope: new TestDynamicScope(),
-      mode: "rehydrate"
+      dynamicScope: new TestDynamicScope()
     });
   }
 
@@ -1224,19 +1232,19 @@ class Rehydration extends RenderingTest {
 
   @test "Node curlies"() {
     this.setupServer('<div>{{node}}</div>');
-
-    let node = this.env.getAppendOperations().createTextNode('hello');
+    let doc = new SimpleDOM.Document();
+    let node = doc.createTextNode('hello');
     this.renderServerSide({ node });
     this.assertServerOutput('<div>hello</div>');
 
     this.setupClient();
 
-    let clientNode = this.env.getDOM().createTextNode('hello');
+    let clientNode = document.createTextNode('hello');
     this.renderClientSide({ node: clientNode });
     this.assertHTML('<div>hello</div>');
     this.assertStableRerender();
 
-    let clientNode2 = this.env.getDOM().createTextNode('goodbye');
+    let clientNode2 = document.createTextNode('goodbye');
     this.rerender({ node: clientNode2 });
     this.assertHTML('<div>goodbye</div>');
     this.assertStableNodes({ except: clientNode as Text });

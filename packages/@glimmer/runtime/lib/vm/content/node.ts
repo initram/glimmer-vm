@@ -1,6 +1,5 @@
 import DynamicContentBase, { DynamicContent } from './dynamic';
 import Bounds from '../../bounds';
-import Environment from '../../environment';
 import { Opaque, Simple } from "@glimmer/interfaces";
 
 export default class DynamicNodeContent extends DynamicContentBase {
@@ -8,11 +7,11 @@ export default class DynamicNodeContent extends DynamicContentBase {
     super(trusting);
   }
 
-  update(env: Environment, value: Opaque): DynamicContent {
+  update(value: Opaque): DynamicContent {
     let { lastValue } = this;
 
     if (value === lastValue) return this;
 
-    return this.retry(env, value);
+    return this.retry(value);
   }
 }

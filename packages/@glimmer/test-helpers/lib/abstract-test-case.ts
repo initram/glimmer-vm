@@ -1,7 +1,7 @@
 import { PathReference, Tagged, TagWrapper, RevisionTag, DirtyableTag, Tag } from "@glimmer/reference";
-import { RenderResult, RenderLayoutOptions } from "@glimmer/runtime";
+import { RenderResult, RenderLayoutOptions, RehydrateBuilder, NewElementBuilder } from "@glimmer/runtime";
 import { Opaque, Dict, dict, expect } from "@glimmer/util";
-import { NodeDOMTreeConstruction } from "@glimmer/node";
+import { SerializeBuilder } from "@glimmer/node";
 import { Option } from "@glimmer/interfaces";
 import { UpdatableReference } from "@glimmer/object-reference";
 import { assign, equalTokens, normalizeInnerHTML } from "./helpers";
@@ -531,19 +531,23 @@ export abstract class AbstractRenderTest {
 
 export class RenderTests extends AbstractRenderTest {
   protected element: HTMLDivElement;
+  public doc: any;
   constructor(env: TestEnvironment) {
     super(env);
-    this.element = this.env
-      .getAppendOperations()
-      .createElement('div') as HTMLDivElement;
+    this.doc = document;
+    this.element = this.doc.createElement('div');
   }
+
   renderTemplate(template: string): RenderResult {
     this.populateHelpers();
     let { env } = this;
+    let elementBuilder = NewElementBuilder.forInitialRender();
+    this.element = elementBuilder.dom.createElement('div') as HTMLDivElement;
+    elementBuilder.initializeCursor(this.element, null);
     return renderTemplate(template, {
+      elementBuilder,
       env,
       self: new UpdatableReference(this.context),
-      cursor: { element: this.element, nextSibling: null },
       dynamicScope: new TestDynamicScope()
     });
   }
@@ -552,11 +556,7 @@ export class RenderTests extends AbstractRenderTest {
 export class RehydrationTests extends RenderTests {
   serialized: string;
   setupServer(template: string = this.template) {
-    let doc = new SimpleDOM.Document();
-    let env = new TestEnvironment({
-      document: doc,
-      appendOperations: new NodeDOMTreeConstruction(doc)
-    });
+    let env = new TestEnvironment();
     this.setup({ template, env });
   }
 
@@ -601,15 +601,17 @@ export class RehydrationTests extends RenderTests {
     this.setupServer();
     this.populateHelpers();
     let { env } = this;
-    this.element = env.getAppendOperations().createElement("div") as HTMLDivElement;
+    let elementBuilder = SerializeBuilder.forInitialRender();
+    this.element = elementBuilder.dom.createElement("div") as HTMLDivElement;
+    elementBuilder.initializeCursor(this.element, null);
     let template = expect(this.template, "Must set up a template before calling renderServerSide");
+    env['elementBuilder'] = SerializeBuilder;
     // Emulate server-side render
     renderTemplate(template, {
+      elementBuilder,
       env,
       self: new UpdatableReference(this.context),
-      cursor: { element: this.element, nextSibling: null },
       dynamicScope: new TestDynamicScope(),
-      mode: 'serialize'
     });
 
     this.takeSnapshot();
@@ -629,15 +631,17 @@ export class RehydrationTests extends RenderTests {
     this.setupClient();
     this.populateHelpers();
     let { env } = this;
-    this.element = env.getAppendOperations().createElement("div") as HTMLDivElement;
+    let elementBuilder = RehydrateBuilder.forInitialRender();
+    this.element = elementBuilder.dom.createElement("div") as HTMLDivElement;
+    elementBuilder.initializeCursor(this.element, null);
     let template = expect(this.template, "Must set up a template before calling renderClientSide");
     // Client-side rehydration
+    env['elementBuilder'] = RehydrateBuilder;
     this.renderResult = renderTemplate(template, {
+      elementBuilder,
       env,
       self: new UpdatableReference(this.context),
-      cursor: { element: this.element, nextSibling: null },
-      dynamicScope: new TestDynamicScope(),
-      mode: 'rehydrate'
+      dynamicScope: new TestDynamicScope()
     });
   }
 
